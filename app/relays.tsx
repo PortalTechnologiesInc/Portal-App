@@ -16,8 +16,10 @@ import { ArrowLeft, Pencil, X, QrCode, Check } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { DatabaseService, NostrRelayWithDates } from '@/services/database';
+import Dropdown from 'react-native-input-select';
 
 import relayListFile from '../assets/RelayListist.json';
+import { TSelectedItem } from 'react-native-input-select/lib/typescript/src/types/index.types';
 
 function makeList(text: string): string[] {
   return text.split(/\r?\n/)
@@ -29,10 +31,8 @@ export default function NostrRelayManagementScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [everyRelayList, setEveryRelayList] = useState<string[]>([]);
-  const [selected, setSelected] = useState<string>();
-  const [query, setQuery] = useState('');
-  const [pickedRelays, setPickedRelays] = useState<NostrRelayWithDates[]>([]);
-  const [inputValue, setInputValue] = useState('');
+  const [selectedRelays, setSelectedRelays] = useState<TSelectedItem | TSelectedItem[] | null>(null);
+  const [relayTextFieldValue, setRelayTextFieldValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   const sqliteContext = useSQLiteContext();
@@ -42,7 +42,8 @@ export default function NostrRelayManagementScreen() {
   useEffect(() => {
     const loadEveryRelayList = async () => {
       try {
-        setEveryRelayList(relayListFile);
+        const x = relayListFile.slice(0, 10)
+        setEveryRelayList(x);
       } catch (error) {
         console.error('Error loading relays data:', error);
       } finally {
@@ -54,8 +55,8 @@ export default function NostrRelayManagementScreen() {
 
     const loadRelaysData = async () => {
       try {
-        const relays = await DB.getRelays();
-        setPickedRelays(relays);
+        const relays = (await DB.getRelays()).map((value) => value.ws_uri);
+        setSelectedRelays(relays);
       } catch (error) {
         console.error('Error loading relays data:', error);
       } finally {
@@ -82,10 +83,6 @@ export default function NostrRelayManagementScreen() {
     // }
   };
 
-  const onSearch = (text: string) => {
-    setQuery(text);
-  };
-
   // Navigate back to previous screen
   const handleBackPress = () => {
     // Check navigation parameters
@@ -101,15 +98,28 @@ export default function NostrRelayManagementScreen() {
     }
   };
 
-  const filteredData = useMemo(() => {
-    if (everyRelayList && everyRelayList.length > 0) {
-      return everyRelayList.filter((relay) =>
-        relay
-          .toLocaleLowerCase('en')
-          .includes(query.toLocaleLowerCase('en'))
-      );
+  const handleClearInput = async () => {
+    try {
+      // Clear the wallet URL in storage
+      setRelayTextFieldValue('');
+    } catch (error) {
+      console.error('Error clearing wallet URL:', error);
+      Alert.alert('Error', 'Failed to clear wallet URL. Please try again.');
     }
-  }, [everyRelayList, query]);
+  };
+
+  const updateRelays = () => {
+    let x = makeList(relayTextFieldValue)
+    if (selectedRelays) {
+      if (typeof selectedRelays === 'TSelectedItem[]')) {
+        selectedRelays.concat(selectedRelays.map(item => item.toString()))
+      } else {
+        setSelectedRelays(selectedRelays.concat([])))
+      }
+    }
+    selectedRelays.
+      makeList(relayTextFieldValue)
+  }
 
   if (isLoading) {
     return (
@@ -130,10 +140,6 @@ export default function NostrRelayManagementScreen() {
         </ThemedView>
       </SafeAreaView>
     );
-  }
-
-  function setIsEditing(arg0: boolean): void {
-    throw new Error("Function not implemented.");
   }
 
   return (
@@ -165,7 +171,42 @@ export default function NostrRelayManagementScreen() {
           >
             Add a relay:
           </ThemedText>
-          <ThemedText>todo add a picking list</ThemedText>
+          <Dropdown
+            modalControls={{
+              modalOptionsContainerStyle: {
+                padding: 10,
+                backgroundColor: Colors.almostWhite,
+              },
+            }}
+            listComponentStyles={{
+              itemSeparatorStyle: {
+                opacity: 0,
+                margin: 2
+              },
+            }}
+            dropdownStyle={{
+              backgroundColor: Colors.almostWhite,
+            }}
+            searchControls={{
+              textInputStyle: {
+                backgroundColor: Colors.almostWhite,
+              },
+            }}
+            checkboxControls={{
+              checkboxStyle: {
+                borderRadius: 30,
+              },
+              checkboxComponent: <View />,
+              checkboxUnselectedColor: Colors.almostWhite
+            }}
+            isMultiple
+            isSearchable
+            placeholder="Select an option..."
+            options={everyRelayList.map((relay) => { return { label: relay, value: relay } })}
+            selectedValue={selectedRelays}
+            onValueChange={(value) => { setSelectedRelays(value) }}
+            primaryColor={Colors.darkGray}
+          />
 
           {/* Custom Relays Input */}
           <ThemedText
@@ -179,19 +220,27 @@ export default function NostrRelayManagementScreen() {
             <View style={styles.relaysUrlInputContainer}>
               <TextInput
                 style={styles.relaysUrlInput}
-                value={inputValue}
+                value={relayTextFieldValue}
                 multiline
                 numberOfLines={9}
-                onChangeText={setInputValue}
+                onChangeText={setRelayTextFieldValue}
                 placeholder="Enter a list of relays url separated by a newline char"
                 placeholderTextColor={Colors.gray}
-              // onFocus={() => setIsEditing(true)}
               />
               <TouchableOpacity style={styles.textFieldAction} onPress={handleIconPress}>
-                <X size={20} color={Colors.almostWhite} />
+                <X size={20} color={Colors.almostWhite} onPress={handleClearInput} />
               </TouchableOpacity>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={updateRelays()}
+          >
+            <ThemedText style={styles.saveButtonText}>
+              Save relays
+            </ThemedText>
+          </TouchableOpacity>
         </ThemedView>
       </ThemedView>
     </SafeAreaView>
@@ -258,5 +307,19 @@ const styles = StyleSheet.create({
   },
   textFieldAction: {
     paddingHorizontal: 8,
+  },
+  saveButton: {
+    backgroundColor: Colors.almostWhite,
+    padding: 16,
+    borderRadius: 8,
+    width: "100%",
+    maxWidth: 500,
+    alignItems: "center",
+    alignSelf: "center",
+  },
+  saveButtonText: {
+    color: Colors.darkGray,
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

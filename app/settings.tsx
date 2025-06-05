@@ -19,7 +19,6 @@ import { useOnboarding } from "@/context/OnboardingContext";
 import { useUserProfile } from "@/context/UserProfileContext";
 import {
 	isWalletConnected,
-	isRelayConnected,
 	walletUrlEvents,
 	deleteMnemonic,
 } from "@/services/SecureStorageService";
@@ -44,7 +43,7 @@ export default function SettingsScreen() {
 		const checkWalletConnection = async () => {
 			try {
 				const walletConnected = await isWalletConnected();
-				const relayConnected = await isRelayConnected();
+				const relayConnected = false
 				setIsRelayConnectedState(relayConnected)
 				setIsWalletConnectedState(walletConnected);
 			} catch (error) {

@@ -377,7 +377,7 @@ export class DatabaseService {
     this.db.withTransactionAsync(async () => {
       for (const relay of relays) {
         await this.db.runAsync(
-          `INSERT INTO nostr_relay (
+          `INSERT INTO nostr_relays (
               ws_uri, created_at
             ) VALUES (?, ?)`,
           [
@@ -395,7 +395,7 @@ export class DatabaseService {
    */
   async getRelays(): Promise<NostrRelayWithDates[]> {
     const records = await this.db.getAllAsync<NostrRelay>(
-      `SELECT * FROM nostr_relay`
+      `SELECT * FROM nostr_relays`
     );
 
     return records.map(record => ({
