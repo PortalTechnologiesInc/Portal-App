@@ -19,6 +19,7 @@ import { useOnboarding } from "@/context/OnboardingContext";
 import { useUserProfile } from "@/context/UserProfileContext";
 import {
 	isWalletConnected,
+	isRelayConnected,
 	walletUrlEvents,
 	deleteMnemonic,
 } from "@/services/SecureStorageService";
@@ -31,7 +32,8 @@ export default function SettingsScreen() {
 	const { resetOnboarding } = useOnboarding();
 	const { username, avatarUri, setUsername, setAvatarUri } = useUserProfile();
 	const nostrService = useNostrService();
-	const [isConnected, setIsConnected] = useState(false);
+	const [isWalletConnectedState, setIsWalletConnectedState] = useState(false);
+	const [isRelayConnectedState, setIsRelayConnectedState] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
 	const [usernameInput, setUsernameInput] = useState("");
 	const [profileIsLoading, setProfileIsLoading] = useState(false);
@@ -41,10 +43,12 @@ export default function SettingsScreen() {
 	useEffect(() => {
 		const checkWalletConnection = async () => {
 			try {
-				const connected = await isWalletConnected();
-				setIsConnected(connected);
+				const walletConnected = await isWalletConnected();
+				const relayConnected = await isRelayConnected();
+				setIsRelayConnectedState(relayConnected)
+				setIsWalletConnectedState(walletConnected);
 			} catch (error) {
-				console.error("Error checking wallet connection:", error);
+				console.error("Error checking connection:", error);
 			} finally {
 				setIsLoading(false);
 			}
@@ -56,7 +60,7 @@ export default function SettingsScreen() {
 		const subscription = walletUrlEvents.addListener(
 			"walletUrlChanged",
 			async (newUrl) => {
-				setIsConnected(Boolean(newUrl?.trim()));
+				setIsWalletConnectedState(Boolean(newUrl?.trim()));
 			},
 		);
 
@@ -166,6 +170,16 @@ export default function SettingsScreen() {
 		});
 	};
 
+	const handleNostrCardPress = () => {
+		// Navigate to nostr management page with proper source parameter
+		router.push({
+			pathname: "/relays",
+			params: {
+				source: "settings",
+			},
+		});
+	};
+
 	const handleWalletUrlSubmit = () => {
 		if (!walletUrl.trim()) {
 			Alert.alert("Error", "Please enter a valid URL");
@@ -175,7 +189,7 @@ export default function SettingsScreen() {
 		try {
 			// Trigger the same event that happens when scanning a QR code
 			walletUrlEvents.emit("walletUrlChanged", walletUrl.trim());
-			setIsConnected(true);
+			setIsWalletConnectedState(true);
 			setWalletUrl("");
 			Keyboard.dismiss();
 			Alert.alert("Success", "Wallet connected successfully");
@@ -284,17 +298,17 @@ export default function SettingsScreen() {
 						<ThemedText style={styles.sectionTitle}>Wallet</ThemedText>
 						<ThemedView style={styles.walletSection}>
 							<TouchableOpacity
-								style={styles.walletCard}
+								style={styles.card}
 								onPress={handleWalletCardPress}
 								activeOpacity={0.7}
 							>
-								<View style={styles.walletCardContent}>
-									<View style={styles.walletCardLeft}>
-										<ThemedText style={styles.walletCardTitle}>
+								<View style={styles.cardContent}>
+									<View style={styles.cardLeft}>
+										<ThemedText style={styles.cardTitle}>
 											Wallet Connect
 										</ThemedText>
-										<ThemedText style={styles.walletCardStatus}>
-											{isConnected ? "Connected" : "Not connected"}
+										<ThemedText style={styles.cardStatus}>
+											{isWalletConnectedState ? "Connected" : "Not connected"}
 										</ThemedText>
 									</View>
 									<ChevronRight size={24} color={Colors.almostWhite} />
@@ -303,6 +317,29 @@ export default function SettingsScreen() {
 						</ThemedView>
 					</ThemedView>
 
+					{/* Nostr Section */}
+					<ThemedView style={styles.section}>
+						<ThemedText style={styles.sectionTitle}>Relays</ThemedText>
+						<ThemedView style={styles.walletSection}>
+							<TouchableOpacity
+								style={styles.card}
+								onPress={handleNostrCardPress}
+								activeOpacity={0.7}
+							>
+								<View style={styles.cardContent}>
+									<View style={styles.cardLeft}>
+										<ThemedText style={styles.cardTitle}>
+											Nostr relays
+										</ThemedText>
+										<ThemedText style={styles.cardStatus}>
+											{isRelayConnectedState ? "Connected" : "Not connected"}
+										</ThemedText>
+									</View>
+									<ChevronRight size={24} color={Colors.almostWhite} />
+								</View>
+							</TouchableOpacity>
+						</ThemedView>
+					</ThemedView>
 					{/* Extra Section */}
 					<ThemedView style={styles.section}>
 						<ThemedText style={styles.sectionTitle}>Extra</ThemedText>
@@ -377,27 +414,27 @@ const styles = StyleSheet.create({
 		paddingVertical: 12,
 		width: "100%",
 	},
-	walletCard: {
+	card: {
 		backgroundColor: Colors.darkGray,
 		borderRadius: 12,
 		padding: 16,
 		marginBottom: 16,
 	},
-	walletCardContent: {
+	cardContent: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
 	},
-	walletCardLeft: {
+	cardLeft: {
 		flex: 1,
 	},
-	walletCardTitle: {
+	cardTitle: {
 		fontSize: 18,
 		fontWeight: "600",
 		color: Colors.almostWhite,
 		marginBottom: 4,
 	},
-	walletCardStatus: {
+	cardStatus: {
 		fontSize: 14,
 		color: Colors.dirtyWhite,
 	},

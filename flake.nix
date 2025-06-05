@@ -42,6 +42,7 @@
               aider-chat
               nodejs_23
               openjdk17
+              typescript-language-server
             ];
 
             ANDROID_SDK_ROOT = "${androidComposition.androidsdk}/libexec/android-sdk";
@@ -58,7 +59,7 @@
               export PATH="./node_modules/.bin:$PATH"
               npm config set prefix "$HOME/.npm-global"
 
-              if ! command -v expo &> /dev/null; then
+              if ! command -v npx expo &> /dev/null; then
                 echo "installing expo..."
                 npm install -g @expo/cli
               fi

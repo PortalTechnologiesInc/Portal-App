@@ -45,6 +45,11 @@ export interface SubscriptionRecord {
   created_at: number; // Unix timestamp in seconds
 }
 
+export interface NostrRelay {
+  ws_uri: string;
+  created_at: number;
+}
+
 // Application layer types (with Date objects)
 export interface ActivityWithDates extends Omit<ActivityRecord, 'date' | 'created_at'> {
   date: Date;
@@ -67,8 +72,12 @@ export interface SubscriptionWithDates
   created_at: Date;
 }
 
+export interface NostrRelayWithDates extends Omit<NostrRelay, 'created_at'> {
+  created_at: Date;
+}
+
 export class DatabaseService {
-  constructor(private db: SQLiteDatabase) {}
+  constructor(private db: SQLiteDatabase) { }
 
   // Database reset method
   async dropAllTables(): Promise<void> {
@@ -361,4 +370,37 @@ export class DatabaseService {
       created_at: fromUnixSeconds(record.created_at),
     }));
   }
+
+  async addRelays(
+    relays: string[]
+  ): Promise<void> {
+    this.db.withTransactionAsync(async () => {
+      for (const relay of relays) {
+        await this.db.runAsync(
+          `INSERT INTO nostr_relay (
+              ws_uri, created_at
+            ) VALUES (?, ?)`,
+          [
+            relay,
+            toUnixSeconds(Date.now())
+          ]
+        );
+      }
+    })
+  };
+
+  /**
+   * Get relays
+   * @returns Promise that resolves with an object containing the ws uri and it's creation date
+   */
+  async getRelays(): Promise<NostrRelayWithDates[]> {
+    const records = await this.db.getAllAsync<NostrRelay>(
+      `SELECT * FROM nostr_relay`
+    );
+
+    return records.map(record => ({
+      ...record,
+      created_at: fromUnixSeconds(record.created_at)
+    }));
+  };
 }
