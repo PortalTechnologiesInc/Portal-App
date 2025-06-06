@@ -217,7 +217,7 @@ export const DatabaseProvider = ({ children }: DatabaseProviderProps) => {
 			if (currentDbVersion <= 4) {
 				await db.execAsync(`
           			CREATE TABLE IF NOT EXISTS nostr_relays (
-            			ws_uri TEXT NOT NULL,
+            			ws_uri TEXT NOT NULL UNIQUE,
             			created_at INTEGER NOT NULL -- Unix timestamp
 					)
         		`);

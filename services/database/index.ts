@@ -371,13 +371,21 @@ export class DatabaseService {
     }));
   }
 
-  async addRelays(
+  async updateRelays(
     relays: string[]
-  ): Promise<void> {
+  ): Promise<number> {
     this.db.withTransactionAsync(async () => {
+      const placeholders = relays.map(() => '?').join(', ');
+      await this.db.runAsync(
+        `DELETE FROM nostr_relays
+           WHERE ws_uri NOT IN (?)`,
+        [
+          placeholders,
+        ]
+      );
       for (const relay of relays) {
         await this.db.runAsync(
-          `INSERT INTO nostr_relays (
+          `INSERT OR IGNORE INTO nostr_relays (
               ws_uri, created_at
             ) VALUES (?, ?)`,
           [
@@ -387,6 +395,7 @@ export class DatabaseService {
         );
       }
     })
+    return 0
   };
 
   /**

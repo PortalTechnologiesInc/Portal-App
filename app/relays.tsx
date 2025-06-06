@@ -27,12 +27,26 @@ function makeList(text: string): string[] {
     .filter((line: string) => line.length > 0);
 }
 
+function splitArray<T>(arr: T[], predicate: (item: T) => boolean): [T[], T[]] {
+  const pass: T[] = [];
+  const fail: T[] = [];
+  for (const item of arr) {
+    (predicate(item) ? pass : fail).push(item);
+  }
+  return [pass, fail];
+}
+
+function isWebsocketUri(uri: string): boolean {
+  const regex = /^wss?:\/\/([a-zA-Z0-9.-]+)(:\d+)?(\/[^\s]*)?$/;
+  return regex.test(uri)
+}
+
 export default function NostrRelayManagementScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [everyRelayList, setEveryRelayList] = useState<string[]>([]);
-  const [selectedRelays, setSelectedRelays] = useState<TSelectedItem | TSelectedItem[] | null>(null);
-  const [relayTextFieldValue, setRelayTextFieldValue] = useState<string>('');
+  const [everyPopularRelayList, setEveryRelayList] = useState<string[]>([]);
+  const [selectedRelays, setSelectedRelays] = useState<string[]>([]);
+  const [customRelayTextFieldValue, setCustomRelayTextFieldValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   const sqliteContext = useSQLiteContext();
@@ -40,10 +54,11 @@ export default function NostrRelayManagementScreen() {
 
   // Load relay data on mount
   useEffect(() => {
+    const partialList = relayListFile.slice(0, 10);
     const loadEveryRelayList = async () => {
       try {
-        const x = relayListFile.slice(0, 10)
-        setEveryRelayList(x);
+        setEveryRelayList(partialList);
+        console.log("relay settati")
       } catch (error) {
         console.error('Error loading relays data:', error);
       } finally {
@@ -55,8 +70,16 @@ export default function NostrRelayManagementScreen() {
 
     const loadRelaysData = async () => {
       try {
-        const relays = (await DB.getRelays()).map((value) => value.ws_uri);
-        setSelectedRelays(relays);
+        const relayInUse = (await DB.getRelays()).map(value => value.ws_uri);
+        console.log("relays in the db: ", relayInUse)
+
+        console.log(partialList);
+        const [popularRelays, customRelays] = splitArray(relayInUse, item => partialList.includes(item))
+        console.log(customRelays);
+        console.log(popularRelays);
+
+        setSelectedRelays(popularRelays);
+        setCustomRelayTextFieldValue(customRelays.join('\n'));
       } catch (error) {
         console.error('Error loading relays data:', error);
       } finally {
@@ -65,23 +88,6 @@ export default function NostrRelayManagementScreen() {
     };
     loadRelaysData()
   }, []);
-
-  const handleIconPress = () => {
-    // if (!isEditing) {
-    //   // If not editing, start editing
-    //   setIsEditing(true);
-    //   return;
-    // }
-
-    // if (hasChanged) {
-    //   // If value has changed, save it
-    //   handleSaveWalletUrl();
-    // } else {
-    //   // If value is the same and we're editing, clear it
-    //   handleClearInput();
-    //   setIsEditing(false);
-    // }
-  };
 
   // Navigate back to previous screen
   const handleBackPress = () => {
@@ -101,24 +107,29 @@ export default function NostrRelayManagementScreen() {
   const handleClearInput = async () => {
     try {
       // Clear the wallet URL in storage
-      setRelayTextFieldValue('');
+      setCustomRelayTextFieldValue('');
     } catch (error) {
       console.error('Error clearing wallet URL:', error);
       Alert.alert('Error', 'Failed to clear wallet URL. Please try again.');
     }
   };
 
-  const updateRelays = () => {
-    let x = makeList(relayTextFieldValue)
-    if (selectedRelays) {
-      if (typeof selectedRelays === 'TSelectedItem[]')) {
-        selectedRelays.concat(selectedRelays.map(item => item.toString()))
-      } else {
-        setSelectedRelays(selectedRelays.concat([])))
+  const updateRelays = async () => {
+    const customRelays = makeList(customRelayTextFieldValue)
+    customRelays.forEach(relay => {
+      if(!isWebsocketUri(relay)) {
+        // show error
+        console.log("lo e'")
+        return
       }
+    })
+    let addedRelays = selectedRelays?.concat(customRelays)
+    try {
+      await DB.updateRelays(addedRelays)
+    } catch (error) {
+      console.error(error)
     }
-    selectedRelays.
-      makeList(relayTextFieldValue)
+    router.back();
   }
 
   if (isLoading) {
@@ -169,7 +180,7 @@ export default function NostrRelayManagementScreen() {
             lightColor={Colors.darkGray}
             darkColor={Colors.almostWhite}
           >
-            Add a relay:
+            Popular relays:
           </ThemedText>
           <Dropdown
             modalControls={{
@@ -185,6 +196,7 @@ export default function NostrRelayManagementScreen() {
               },
             }}
             dropdownStyle={{
+              paddingEnd: 50,
               backgroundColor: Colors.almostWhite,
             }}
             searchControls={{
@@ -202,9 +214,9 @@ export default function NostrRelayManagementScreen() {
             isMultiple
             isSearchable
             placeholder="Select an option..."
-            options={everyRelayList.map((relay) => { return { label: relay, value: relay } })}
-            selectedValue={selectedRelays}
-            onValueChange={(value) => { setSelectedRelays(value) }}
+            options={everyPopularRelayList.map((relay) => { return { label: relay, value: relay } })}
+            selectedValue={selectedRelays as TSelectedItem[]}
+            onValueChange={(value) => { setSelectedRelays(value as string[]) }}
             primaryColor={Colors.darkGray}
           />
 
@@ -214,28 +226,28 @@ export default function NostrRelayManagementScreen() {
             lightColor={Colors.darkGray}
             darkColor={Colors.almostWhite}
           >
-            Add custom relays:
+            Custom relays:
           </ThemedText>
           <View style={styles.relaysUrlContainer}>
             <View style={styles.relaysUrlInputContainer}>
               <TextInput
                 style={styles.relaysUrlInput}
-                value={relayTextFieldValue}
+                value={customRelayTextFieldValue}
                 multiline
                 numberOfLines={9}
-                onChangeText={setRelayTextFieldValue}
+                onChangeText={setCustomRelayTextFieldValue}
                 placeholder="Enter a list of relays url separated by a newline char"
                 placeholderTextColor={Colors.gray}
               />
-              <TouchableOpacity style={styles.textFieldAction} onPress={handleIconPress}>
-                <X size={20} color={Colors.almostWhite} onPress={handleClearInput} />
+              <TouchableOpacity style={styles.textFieldAction} onPress={handleClearInput}>
+                <X size={20} color={Colors.almostWhite} />
               </TouchableOpacity>
             </View>
           </View>
 
           <TouchableOpacity
             style={styles.saveButton}
-            onPress={updateRelays()}
+            onPress={updateRelays}
           >
             <ThemedText style={styles.saveButtonText}>
               Save relays
