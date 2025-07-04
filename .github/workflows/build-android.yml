@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android aab
 
 on:
   push:
@@ -15,24 +15,24 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Build Android APK
+    - name: Build Android aab
       run: |
         nix build .#android-bundle --print-build-logs
         
-    - name: Find APK file
-      id: find-apk
+    - name: Find aab file
+      id: find-aab
       run: |
-        APK_FILE=$(find result/bin -name "*.apk" | head -1)
-        APK_NAME=$(basename "$APK_FILE")
-        echo "apk-file=$APK_FILE" >> $GITHUB_OUTPUT
-        echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
-        echo "Found APK: $APK_NAME"
+        aab_FILE=$(find result/bin -name "*.aab" | head -1)
+        aab_NAME=$(basename "$aab_FILE")
+        echo "aab-file=$aab_FILE" >> $GITHUB_OUTPUT
+        echo "aab-name=$aab_NAME" >> $GITHUB_OUTPUT
+        echo "Found aab: $aab_NAME"
 
-    - name: Upload unsigned APK artifact
+    - name: Upload unsigned aab artifact
       uses: actions/upload-artifact@v4
       with:
-        name: portal-android-apk-unsigned
-        path: ${{ steps.find-apk.outputs.apk-file }}
+        name: portal-android-aab-unsigned
+        path: ${{ steps.find-aab.outputs.aab-file }}
         retention-days: 30
         
     - name: Upload build logs
@@ -55,44 +55,46 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Download unsigned APK
+    - name: Download unsigned aab
       uses: actions/download-artifact@v4
       with:
-        name: portal-android-apk-unsigned
-        path: ./apk
+        name: portal-android-aab-unsigned
+        path: ./aab
 
     - name: Decode keystore
       run: |
         echo "${{ secrets.PORTAL_DEBUG_KEYSTORE }}" | base64 -d > portal-debug.keystore
 
-    - name: Find APK file
-      id: find-apk
+    - name: Find aab file
+      id: find-aab
       run: |
-        APK_FILE=$(find ./apk -name "*.apk" | head -1)
-        APK_NAME=$(basename "$APK_FILE")
-        SIGNED_APK_NAME="${APK_NAME%.*}-signed.apk"
-        echo "apk-file=$APK_FILE" >> $GITHUB_OUTPUT
-        echo "apk-name=$APK_NAME" >> $GITHUB_OUTPUT
-        echo "signed-apk-name=$SIGNED_APK_NAME" >> $GITHUB_OUTPUT
-        echo "Found APK: $APK_NAME"
+        aab_FILE=$(find ./aab -name "*.aab" | head -1)
+        aab_NAME=$(basename "$aab_FILE")
+        SIGNED_aab_NAME="${aab_NAME%.*}-signed.aab"
+        echo "aab-file=$aab_FILE" >> $GITHUB_OUTPUT
+        echo "aab-name=$aab_NAME" >> $GITHUB_OUTPUT
+        echo "signed-aab-name=$SIGNED_aab_NAME" >> $GITHUB_OUTPUT
+        echo "Found aab: $aab_NAME"
 
-    - name: Sign APK
+    - name: Sign aab
       env:
         KEYSTORE_PASSWORD: ${{ secrets.PORTAL_DEBUG_KEYSTORE_PASSWORD }}
       run: |
         nix run nixpkgs#apksigner -- sign \
           --ks portal-debug.keystore \
           --ks-pass env:KEYSTORE_PASSWORD \
-          --out ${{ steps.find-apk.outputs.signed-apk-name }} \
-          ${{ steps.find-apk.outputs.apk-file }}
+          --min-sdk-version 23 \
+          --max-sdk-version 35 \
+          --v1-signing-enabled=true \
+          --v2-signing-enabled=true \
+          --v3-signing-enabled=true \
+          --v4-signing-enabled=true \
+          --out ${{ steps.find-aab.outputs.signed-aab-name }} \
+          ${{ steps.find-aab.outputs.aab-file }}
 
-    - name: Verify APK signature
-      run: |
-        nix run nixpkgs#apksigner -- verify --verbose ${{ steps.find-apk.outputs.signed-apk-name }}
-
-    - name: Upload signed APK artifact
+    - name: Upload signed aab artifact
       uses: actions/upload-artifact@v4
       with:
-        name: portal-android-apk-signed
-        path: ${{ steps.find-apk.outputs.signed-apk-name }}
+        name: portal-android-aab-signed
+        path: ${{ steps.find-aab.outputs.signed-aab-name }}
         retention-days: 30 

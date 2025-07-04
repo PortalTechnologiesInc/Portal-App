@@ -64,27 +64,19 @@
             cp expo-template-bare-minimum-*.tgz $out/expo-template-bare-minimum.tar.gz
           '';
         };
+
+        src = pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = pkgs.lib.fileset.difference
+            (pkgs.lib.fileset.gitTracked ./.)
+            ./flake.nix;
+        };
         
         # First stage: Generate native Android project using Expo
         expo-prebuild = pkgs.buildNpmPackage {
           pname = "portal-expo-prebuild";
           version = packageJson.version;
-          src = pkgs.lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type: let
-              baseName = baseNameOf path;
-            in
-              # Exclude flake.nix and flake.lock to prevent rebuilds when only Nix config changes
-              baseName != "flake.nix" &&
-              baseName != "flake.lock" &&
-              # Exclude common development files
-              baseName != "result" &&
-              baseName != ".git" &&
-              baseName != ".gitignore" &&
-              baseName != "README.md" &&
-              # Include everything else
-              true;
-          };
+          inherit src;
           
           npmDepsHash = "sha256-TSFjyuWOX2rmeYufHS+t8YCgIOS7wQ7ohi9d1N41YUk=";
           
@@ -104,7 +96,10 @@
 
           installPhase = ''
             mkdir -p $out
-            cp -r * $out/
+            cp -r android $out/
+            cp -r node_modules $out/
+            cp package.json $out/
+            cp app.json $out/
           '';
         };
 
@@ -113,9 +108,51 @@
         GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${ANDROID_HOME}/build-tools/${android.buildToolsVersion}/aapt2 ";
 
         # Inspired by https://rafael.ovh/posts/packaging-gradle-software-with-nix/
+        android-deps = pkgs.stdenv.mkDerivation rec {
+          name = "portal-android-deps";
+          inherit src;
+
+          nativeBuildInputs = with pkgs; [ gradle nodejs_23 zip ];
+
+          GRADLE_ARGS = "--no-daemon --write-verification-metadata sha512";
+          JAVA_HOME = pkgs.openjdk17.home;
+
+          inherit ANDROID_HOME GRADLE_OPTS;
+
+          dontFixup = true;
+
+          buildPhase = ''
+            export HOME=$TMPDIR
+
+            # Copy the expo-prebuild directory to the current directory
+            cp -R --no-preserve=all ${expo-prebuild}/. .
+            chmod +x ./android/gradlew
+            chmod +x ./node_modules/react-native/sdks/hermesc/linux64-bin/hermesc
+
+            cd android
+            GRADLE_USER_HOME=$(pwd)/.gradle ./gradlew ${GRADLE_JAVA_OPTS} ${GRADLE_ARGS} bundleRelease
+          '';
+
+          installPhase = ''
+            mkdir -p $out/caches/modules-2
+            cp -a .gradle/caches/modules-2/. $out/caches/modules-2/
+
+            rm -rf $out/caches/modules-2/metadata-**/*.bin
+
+            # Delete extra files to ensure a stable hash
+            find $out -type f -regex '.+\\(\\.lastUpdated\\|resolver-status\\.properties\\|_remote\\.repositories\\|\\.lock\\)' -delete
+            find $out -type f \( -name "*.log" -o -name "*.lock" -o -name "gc.properties" \) -delete
+          '';
+
+          outputHashAlgo = "sha256";
+          outputHashMode = "recursive";
+          outputHash = "sha256-8CR5E4V8gM/K2Y79hJuNpH7jev087MpcHo0Dr6SSw0U=";
+        };
+
         android-bundle = pkgs.stdenv.mkDerivation rec {
           name = "portal-android-bundle";
-          src = expo-prebuild;
+          inherit src;
+
           nativeBuildInputs = with pkgs; [ gradle nodejs_23 zip ];
           
           GRADLE_ARGS = "--no-daemon --write-verification-metadata sha512";
@@ -128,28 +165,37 @@
           buildPhase = ''
             export HOME=$TMPDIR
 
+            # Copy the expo-prebuild directory to the current directory
+            cp -R --no-preserve=all ${expo-prebuild}/. .
+            chmod +x ./node_modules/react-native/sdks/hermesc/linux64-bin/hermesc
+
             cd android
-            GRADLE_USER_HOME=$(pwd)/.gradle ./gradlew ${GRADLE_JAVA_OPTS} ${GRADLE_ARGS} assembleRelease
+
+            mkdir .gradle
+            # Copy the whole gradle cache to a writeable path, since gradle wants to write more files into the $GRADLE_USER_HOME folder.
+            cp -R --no-preserve=all ${android-deps}/. .gradle/
+
+            cp -v ../nix-gradle-hack/* .gradle/caches/modules-2/metadata-*
+
+            # Note: Nix Wiki makes use of $GRADLE_OPTS for setting additional gradle arguments, but this environment variable has since been deprecated:
+            # https://nixos.wiki/wiki/Android#gradlew
+            GRADLE_USER_HOME=$(pwd)/.gradle gradle bundleRelease --offline ${GRADLE_OPTS} ${GRADLE_JAVA_OPTS} ${GRADLE_ARGS}
           '';
-          
+
           installPhase = ''
             mkdir -p $out/bin
-            
-            # Copy the release APK
-            find ./app/build/outputs/apk/release -name "*.apk" -exec cp {} $out/bin/portal-android-release.apk \;
+
+            # Copy the release aab
+            find ./app/build/outputs/bundle/release -name "*.aab" -exec cp {} $out/bin/portal-android-release.aab \;
 
             # Strip signature made with a random key
-            zip -d $out/bin/portal-android-release.apk "META-INF/*"
+            zip -d $out/bin/portal-android-release.aab "META-INF/*"
           '';
-          
-          outputHashAlgo = "sha256";
-          outputHashMode = "recursive";
-          outputHash = "sha256-PADwFlhqgDtV7RmmQZuLAv6ZR/221h87w364MbXqPKk=";
         };
       in
       {
         packages = {
-          inherit expo-prebuild android-bundle;
+          inherit expo-prebuild android-deps android-bundle;
         };
 
         devShells = {
