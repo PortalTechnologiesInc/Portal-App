@@ -1,4 +1,4 @@
-{
+export default {
   "expo": {
     "name": "Portal",
     "slug": "Portal",
@@ -25,6 +25,7 @@
       ]
     },
     "android": {
+      "googleServicesFile": process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/appLogo.png",
         "backgroundColor": "#000000"
@@ -65,10 +66,17 @@
       ],
       "expo-secure-store",
       "expo-sqlite",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "15f4dbf1-f91d-421a-86f4-f29fd3a8e5a1"
+      }
     }
   }
-}
+};
